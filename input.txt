@@ -1,0 +1,207 @@
+var controllerType = 0;//0 is keyboard, 1 is controller
+
+var keys = [];
+var keysDown = [];
+
+var Akeys = [];
+var AkeysDown = [];
+
+var buttonNames = [
+0,0,0,0,0,0,0,0,"BACKSPACE","TAB",0,0,0,"ENTER",0,0,"SHIFT","CTRL","ALT","PAUSE","CAPS LOCK",0,0,0,0,0,0,"ESC",0,0,0,
+0,"SPACE","PG UP","PG DOWN","END","HOME","LEFT","UP","RIGHT","DOWN",0,0,0,0,"INSERT","DELETE",0,"0","1","2","3","4","5","6","7","8","9",0,0,0,
+0,0,0,0,"A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+"Win Key L","Win Key R","Select Key",0,0,"Numpad 0","Numpad 1","Numpad 2","Numpad 3","Numpad 4","Numpad 5","Numpad 6","Numpad 7","Numpad 8","Numpad 9",
+"Multiply",0,"Add",0,"Subtract","Decimal Point","Divide","F1","F2","F3","F4","F5","F6","F7","F8","F9",
+"F10","F11","F12",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"Num Lock","Scroll Lock",0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,"semi-colon {,}","equal sign {=}","comma {,}","dash {-}","period {.}", "Foward Slash {/}","Grave Accent",
+];
+
+const constControls = {"w":38,"a":37,"s":40,"d":39, "Z":90,"X":88,"C":67,"V":86,"A":65,"S":83,"D":68,"E":69,"SHIFT":16,
+"1":49,"2":50,"3":51,"4":52,"5":53,"6":54,"7":55,"8":56,"ENTER":13};
+var controls = {"w":38,"a":37,"s":40,"d":39, "Z":90,"X":88,"C":67,"V":86,"A":65,"S":83,"D":68,"E":69,"SHIFT":16,
+"1":49,"2":50,"3":51,"4":52,"5":53,"6":54,"7":55,"8":56,"ENTER":13};
+const constControllerBindings = ["Z","V","X","D","2","3","C","SHIFT","E","ENTER","6","7","w","s","a","d"];
+var controllerBindings = ["Z","V","X","D","2","3","C","SHIFT","E","ENTER","6","7","w","s","a","d"];
+
+//const constActionBindings = ["JUMP","???","ATTACK","HEAL","2","3","C","DASH","INVENTORY","PAUSE","6","7","UP","DOWN","LEFT","RIGHT"];
+//var actionBindings = ["JUMP","???","ATTACK","HEAL","2","3","C","DASH","INVENTORY","PAUSE","6","7","UP","DOWN","LEFT","RIGHT"];
+
+var controllerBindings2 = {
+"Z":"A",
+"V":"B",
+"X":"X",
+"D":"Y",
+"w":"D-Pad UP",
+"a":"D-Pad LEFT",
+"s":"D-Pad DOWN",
+"d":"D-Pad RIGHT",
+"2":"LB",
+"3":"RB",
+"C":"LT",
+"SHIFT":"RT",
+"E":"SELECT",
+"6":"LSD",
+"7":"RSD",
+};
+var gamepadButtonNames = ["A","B","X","Y","LB","RB","LT","RT","SELECT","START","","","UP","DOWN","LEFT","RIGHT"];
+
+function _resetControls() {
+    controls = Object.assign(controls, constControls);
+    for (var i = 0; i < constControllerBindings.length; i++) {
+        controllerBindings[i] = constControllerBindings[i];
+    }
+    //controllerBindings = constControllerBindings.clone();
+};
+
+document.addEventListener("keydown",function(e) {
+    e.preventDefault();
+    if (!keys[e.keyCode]) {
+        keysDown[e.keyCode] = true;
+    } else {
+        keysDown[e.keyCode] = false;
+    }
+    keys[e.keyCode] = true;
+    if (!Akeys[e.keyCode]) {
+        AkeysDown[e.keyCode] = true;
+    } else {
+        AkeysDown[e.keyCode] = false;
+    }
+    Akeys[e.keyCode] = true;
+    controllerType = 0;
+});
+
+document.addEventListener("keyup",function(e) {
+    e.preventDefault();
+    keysDown[e.keyCode] = false;
+    keys[e.keyCode] = false;
+    AkeysDown[e.keyCode] = false;
+    Akeys[e.keyCode] = false;
+});
+
+var gamepads = [];
+var gamepadsActive = [];
+var buttons = [[],[],[],[],[],[],[],[]];
+
+//Debug
+window.addEventListener("gamepadconnected", function(e) {
+    gamepads[e.gamepad.index] = e.gamepad;
+});
+window.addEventListener("gamepaddisconnected", function(e) {
+    gamepads[e.gamepad.index] = undefined;
+});
+var axises = [0,0,0,0];
+
+//If this was multiplayer I'd need to only vibrate selected gamepads,
+//however this one will only vibrate a gamepad if a button has been pressed within the last 1000 frames
+//https://codepen.io/siddv/pen/wEdewG?__cf_chl_captcha_tk__=7bgLP3S42jmKqqVdHxBXQNbVzXWX9oWDILdVb0tx_Jg-1636301187-0-gaNycGzNB9E
+//Where I found how to make the controller vibrate.
+function vibrateGamepads(duration, magnitude) {
+  if (_settings.controllerVibration) {
+    for (var j = 0; j < gamepads.length; j++) {
+        if (gamepads[j] == undefined || gamepadsActive[j] == undefined || gamepadsActive[j] <= 0) {continue;}
+        gamepads[j] = navigator.getGamepads()[j];
+        if (gamepads[j] == undefined) {continue;}
+        var gamepad = gamepads[j];
+        if (gamepad && gamepad.vibrationActuator && gamepad.vibrationActuator.playEffect) {
+            gamepad.vibrationActuator.playEffect('dual-rumble', {
+                duration: duration,
+                strongMagnitude: magnitude/100,
+                weakMagnitude: magnitude/100
+            });
+        }
+    }
+  }
+};
+function gamepadInput() {
+    for (var j = 0; j < gamepads.length; j++) {
+        if (gamepads[j] == undefined) {continue;}
+        gamepads[j] = navigator.getGamepads()[j];
+        if (gamepads[j] == undefined) {continue;}
+        var gamepad = gamepads[j];
+        if (gamepadsActive[j] && gamepadsActive[j] > 0) {
+            gamepadsActive[j]--;
+        }
+        for (var i = 0; i < gamepad.buttons.length; i++) {
+            var b = buttons[j][i];
+            buttons[j][i] = gamepad.buttons[i].pressed;
+            var keyBind = controls[controllerBindings[i]];
+            if (controls[controllerBindings[i]] != undefined && b != buttons[j][i]) {
+                keys[controls[controllerBindings[i]]] = buttons[j][i];
+                Akeys[constControls[constControllerBindings[i]]] = buttons[j][i];
+                gamepadsActive[j] = 1000;
+                controllerType = 1;
+            }
+            if (b == false && buttons[j][i] == true) {
+                keysDown[keyBind] = true;
+                AkeysDown[constControls[constControllerBindings[i]]] = true;
+            }
+        }
+        for (var i = 0; i < gamepad.axes.length; i++) {
+            if (gamepad.axes[i] < -0.5 && i == 0) {
+                controllerType = 1;
+                if (!keys[controls[controllerBindings[14]]]) {keysDown[controls[controllerBindings[14]]] = true;}
+                if (!Akeys[constControls[constControllerBindings[14]]]) {AkeysDown[constControls[constControllerBindings[14]]] = true;}
+                axises[0] = -1;
+                keys[controls[controllerBindings[14]]] = true;
+                Akeys[constControls[constControllerBindings[14]]] = true;
+            } else if (gamepad.axes[i] > -0.5 && i == 0 && axises[0] == -1) {
+                axises[0] = 0;
+                keys[controls[controllerBindings[14]]] = false;
+                Akeys[constControls[constControllerBindings[14]]] = false;
+            }
+            if (gamepad.axes[i] > 0.5 && i == 0) {
+                controllerType = 1;
+                if (!keys[controls[controllerBindings[15]]]) {keysDown[controls[controllerBindings[15]]] = true;}
+                if (!Akeys[constControls[constControllerBindings[15]]]) {AkeysDown[constControls[constControllerBindings[15]]] = true;}
+                axises[0] = 1;
+                keys[controls[controllerBindings[15]]] = true;
+                Akeys[constControls[constControllerBindings[15]]] = true;
+            } else if (gamepad.axes[i] < 0.5 && i == 0 && axises[0] == 1) {
+                axises[0] = 0;
+                keys[controls[controllerBindings[15]]] = false;
+                Akeys[constControls[constControllerBindings[15]]] = false;
+            }
+
+            if (gamepad.axes[i] < -0.55 && i == 1) {
+                controllerType = 1;
+                if (!keys[controls[controllerBindings[12]]]) {keysDown[controls[controllerBindings[12]]] = true;}
+                if (!Akeys[constControls[constControllerBindings[12]]]) {AkeysDown[constControls[constControllerBindings[12]]] = true;}
+                axises[1] = -1;
+                keys[controls[controllerBindings[12]]] = true;
+                Akeys[constControls[constControllerBindings[12]]] = true;
+            } else if (gamepad.axes[i] > -0.55 && i == 1 && axises[1] == -1) {
+                axises[1] = 0;
+                keys[controls[controllerBindings[12]]] = false;
+                Akeys[constControls[constControllerBindings[12]]] = false;
+            }
+            if (gamepad.axes[i] > 0.55 && i == 1) {
+                controllerType = 1;
+                if (!keys[controls[controllerBindings[13]]]) {keysDown[controls[controllerBindings[13]]] = true;}
+                if (!Akeys[constControls[constControllerBindings[13]]]) {AkeysDown[constControls[constControllerBindings[13]]] = true;}
+                axises[1] = 1;
+                keys[controls[controllerBindings[13]]] = true;
+                Akeys[constControls[constControllerBindings[13]]] = true;
+            } else if (gamepad.axes[i] < 0.55 && i == 1 && axises[1] == 1) {
+                axises[1] = 0;
+                keys[controls[controllerBindings[13]]] = false;
+                Akeys[constControls[constControllerBindings[13]]] = false;
+            }
+        }
+    }
+};
+
+function getControllerKey(whatButton, multiple) {
+    var thisControllerBinds = "";
+    for (var i = 0; i < controllerBindings.length; i++) {
+        if (controllerBindings2[controllerBindings[i]] == whatButton) {
+            if (thisControllerBinds.length > 0 && multiple) {
+                thisControllerBinds += ", ";
+                thisControllerBinds += controllerBindings2[constControllerBindings[i]];
+            } else if (thisControllerBinds.length <= 0) {
+                thisControllerBinds += controllerBindings2[constControllerBindings[i]];
+            }
+        }
+    }
+    return thisControllerBinds;
+};

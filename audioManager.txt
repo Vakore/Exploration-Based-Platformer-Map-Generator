@@ -1,0 +1,25 @@
+var playSound = function(sound, volum) {
+    if (volum == undefined) {
+        volum = 0.5;
+    }
+    getId(sound).currentTime = 0;
+    getId(sound).volume = volum * _settings.soundVolume;
+    getId(sound).play();
+};
+
+var resetSound = function(sound) {
+    getId(sound).currentTime = 0;
+};
+
+var endSound = function(sound) {
+    getId(sound).currentTime = 0;
+    getId(sound).pause();
+};
+
+var pauseSound = function(sound) {
+    getId(sound).pause();
+};
+
+var unpauseSound = function(sound) {
+    getId(sound).play();
+};
