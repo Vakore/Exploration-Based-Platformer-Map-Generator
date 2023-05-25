@@ -1,0 +1,899 @@
+<html>
+<title>Map Generator</title>
+<!--<link rel = "shortcut icon" href="image.png" type="image/x-icon">-->
+<!--style = "width:1365px; height:768px-->
+<style>
+html {
+    color:white;
+    background-color:black;
+}
+    
+.center {
+    text-align:center;
+    font-family:monospace;
+}
+</style>
+
+<div class = "center">
+<h1>Metroidvania Map Generator</h1>
+<canvas id = "canva"  width = "910" height = "512"></canvas><!--455 256, 1365 768, 1820 1024--><br>
+</div>
+<canvas id = "bufferCanvas"  width = "455" height = "256" style = "display:none;"></canvas><!--455 256, 1820, 1024--><br>
+<canvas id = "lightCanvas"  width = "455" height = "256" style = "display:none;"></canvas><!--455 256, 1820, 1024--><br>
+<div id = "loadedFiles" style = "display:none;"></div>
+
+<script src = "gameSpeed.txt"></script>
+<!--globalStuff-->
+<script src = "Scripts/globalStuff/input.txt"></script>
+<script src = "Scripts/globalStuff/basicFunctions.txt"></script>
+<script src = "Scripts/globalStuff/audioManager.txt"></script>
+
+<script>
+    /**
+    TODO: Turf wars/breadth-first fill for areas 
+    
+    Loser area definition:
+    Area that is:
+    A: Has very few rooms
+    B: Doesn't have interconnectivity
+    
+    'A' alone if room count/area size is less than a certain threshold or 'A' and 'B' if A is below a certain room count/area size.
+    
+    Turf Wars Quality:
+    Don't have two area starters too close to each other, both in physical proximity and room distance - Fixed, all area starters start in a circle from the starting room
+    Try to make the starter turf wars room one with a larger area
+    
+    
+    Conditions for secret backtrack:
+    Rooms border(or are close to)
+    Entrance count is less than 4(or 3?)
+    The two rooms are more than X rooms apart
+    
+    TODO: "Narrative" builder
+    Step 1: Choose area
+      - Only availible area
+      - Area that is not too large in room size or in room count
+        * If only availible area is large, set cut-off points X rooms away from the start with some randomization
+    Step 2: Use start and area exits to find a rough "middle"(or pick an edge/dead-end) and make it the "destination" room
+    Step 3: Get a list of all possible paths to it
+    Step 4: ???
+    */
+try {
+    var areaFirstNames = [
+        "The",
+        "Crystal",
+        "Dirt",
+        "Infested",
+        "Kingdom's",
+        "King's",
+        "Queen's",
+        "Prince's",
+        "Princess's",
+        "Mountain's",
+        "Forlorn",
+        "Ancient",
+        "Abandoned",
+        "Deep",
+        "Dark",
+        "Steep",
+        "Fog",
+        "Fool's",
+        "Mineral",
+        "Soul",
+        "Derisory's",
+        "Pirate's",
+        "Knight's",
+        "Muddy",
+        "Rainy",
+        "Wind",
+        "Sky",
+        "Sunken",
+        "Boundless",
+        "Hall",
+        "A",
+    ];
+    
+    var areaSecondNames = [
+        "Pit",
+        "Thingy",
+        "Canyon",
+        "Observatory",
+        "Asylum",
+        "Sanctum",
+        "Colosseum",
+        "Peak",
+        "Pass",
+        "Temple",
+        "City",
+        "Gardens",
+        "Storage Facility",
+        "Warehouse",
+        "Mineshaft",
+        "Mines",
+        "Caves",
+        "Drain",
+        "Mountain",
+        "Shop",
+        "Ship",
+        "Plane",
+        "Void",
+        "Abyss",
+        "Empty",
+        "Plains",
+        "Meadows",
+        "Keep",
+        "Star",
+        "Path",
+        "Thingamajig",
+        "Graveyard",
+        "Fortress",
+        "Derisory",
+        "End",
+    ];
+    
+    var areaThirdNames = [
+        "of Hollownest",
+        "of Derisory",
+        "of Dread",
+        "of Despair",
+        "of Idolatry",
+        "of Hope",
+        "of Faith",
+        "of Pain",
+        "of Time",
+        "of Strength",
+        "of the Weak",
+        "of Snakes",
+        "of Beasts",
+        "of Science",
+        "of Pseudoscience",
+        "of Zote the Mighty",
+    ];
+    
+    var areaNames = [];
+    for (var i = 0; i < 11; i++) {
+        if (random(0, 1) > 0.15) {
+            areaNames.push(areaFirstNames[round(random(0, areaFirstNames.length - 0.01))] + " " + areaSecondNames[round(random(0, areaFirstNames.length - 0.01))]);
+        } else {
+            areaNames.push(areaSecondNames[round(random(0, areaFirstNames.length - 0.01))] + " " + areaThirdNames[round(random(0, areaThirdNames.length - 0.01))]);
+        }
+    }
+    for (var i = 0; i < 2; i++) {
+        areaNames[round(random(0, areaNames.length - 0.01))] += " " + areaThirdNames[round(random(0, areaThirdNames.length - 0.01))];
+    }
+    for (var i = 0; i < 3; i++) {
+    }
+    
+    var maxDepth = 30;
+    
+    var areaColors = [
+        [64, 64, 64],
+        [128, 0, 0],
+        [0, 128, 0],
+        [128, 128, 128],
+        [0, 0, 128],
+        [128, 0, 128],
+        [0, 128, 128],
+        [128, 128, 0],
+        [64, 64, 128],
+    ];
+    var areaOrbs = [];
+    /*for (var i = 0; i < 8 && i < areaColors.length; i++) {
+        var pushX = random(30, 170);
+        var pushY = random(30, 170);
+        var retry = true;
+        if (areaOrbs.length == 0) {retry = false;}
+        var attempts = 0;
+        while (retry && attempts < 50) {
+            attempts++;
+            retry = false;
+            for (var j = 0; j < areaOrbs.length; j++) {
+                if (j == i) {j++;}
+                if (dist(pushX, pushY, areaOrbs[j][0], areaOrbs[j][1]) < 45) {
+                    retry = true;
+                    pushX = random(30, 170);
+                    pushY = random(30, 170);
+                }
+            }
+        }
+        areaOrbs.push([pushX, pushY]);
+    }*/
+    var pi2 = Math.PI * 2;
+    
+    var areaStarterRotations = [];
+    var areaRoomCounts = [];
+    for (var i = 0; i < areaColors.length; i++) {
+        areaStarterRotations.push(i);
+        areaRoomCounts.push(0);
+    }
+    
+    areaStarterRotations.sort((a, b) => {return (random(0, 1) - random(0, 1));});
+    
+    for (var i = 0; i < areaColors.length; i++) {
+        areaOrbs.push([85 + cos((pi2 / areaColors.length) * areaStarterRotations[i]) * 45, 85 + sin((pi2 / areaColors.length) * areaStarterRotations[i]) * 45]);
+    }
+    /*for (var i = 0; i < rooms.length; i++) {
+        var closestArea = 0;
+        for (var j = 0; j < areaOrbs.length; j++) {
+            if (dist(rooms[i].x, rooms[i].y, areaOrbs[j][0], areaOrbs[j][1]) <
+                dist(rooms[i].x, rooms[i].y, areaOrbs[closestArea][0], areaOrbs[closestArea][1])) {
+                closestArea = j;
+            }
+        }
+        rooms[i].area = closestArea;
+    }*/
+    
+    
+    var roomOccupations = [];
+    for (var i = 0; i < 100; i++) {
+        roomOccupations.push([]);
+    }
+    //alert(roomOccupations[200][200]);
+    var rooms = [];
+    var roomLength = 0;
+    var distTrackId = 0;
+    function getRoomDistance(roomA, roomB) {
+        var roomDist = 0;
+        
+        var searchers = [roomA];
+        distTrackId++;
+        var stopLoop = false;
+        while (searchers.length > 0) {
+            roomDist++;
+            var mySearchers = searchers.length;
+            for (var i = 0; i < mySearchers && !stopLoop; i++) {
+                for (var j = 0; !stopLoop && j < rooms[searchers[i]].exits.length; j++) {
+                    if (!rooms[rooms[searchers[i]].exits[j].screen].distTrackId ||
+                        rooms[rooms[searchers[i]].exits[j].screen].distTrackId != distTrackId) {
+                        //alert(JSON.stringify(rooms[searchers[i]].exits[j]));
+                        if (rooms[searchers[i]].exits[j].screen == roomB) {
+                            //searchers.splice(0, searchers.length);
+                            //i = Infinity;
+                            //alert(searchers[i] + ", " + rooms[searchers[i]].exits[j].screen + ", " + roomB);
+                            //j = rooms[searchers[i]].exits.length
+                            stopLoop = true;
+                        } else {
+                            rooms[rooms[searchers[i]].exits[j].screen].distTrackId = distTrackId;
+                            searchers.push(rooms[searchers[i]].exits[j].screen);
+                        }
+                    }
+                }
+            }
+            searchers.splice(0, mySearchers);
+        }
+        
+        
+        return roomDist;
+    }
+    
+    for (var k = 0; k < 120 - 120; k++) {
+        var x = round(random(1, 260));
+        var y = round(random(1, 260));
+        var w = round(random(2, 10));
+        var h = round(random(2, 10));
+            for (var j = y; j < y + h; j++) {
+                for (var i = x; i < x + w; i++) {
+                    roomOccupations[j][i] = 2;
+                }
+            }
+    }
+    
+    function generateRoom(parent, exit, x, y, w, h, exits, depth) {
+        var roomOccupied = false;
+        if (x < 1 || y < 1) {roomOccupied = true;}
+        if (depth > 0 && parent && !roomOccupied) {
+            for (var j = y; j < y + h; j++) {
+                while (roomOccupations.length < j + 2) {
+                    roomOccupations.push([]);
+                }
+                for (var i = x; i < x + w; i++) {
+                    if (roomOccupations[j][i] > 0) {
+                        roomOccupied = true;
+                    }
+                }
+            }
+        } else if (parent) {
+            roomOccupied = true;
+        }
+        if (!roomOccupied) {
+            for (var j = y; j < y + h; j++) {
+                for (var i = x; i < x + w; i++) {
+                    roomOccupations[j][i] = 1;
+                }
+            }
+            roomLength++;
+            if (parent) {
+                parent.exits[exit].screen = roomLength - 1;
+                parent.exits[exit].entrance = 0;
+            }
+            rooms.push(new room(x, y, w, h, exits, depth, parent));
+        } else {
+            parent.exits.splice(exit, 1);
+        }
+    }
+    
+    var room = function(x, y, w, h, exits, depth, parent) {
+        this.id = roomLength - 1;
+        //alert(roomLength + ", " + this.id);
+        this.glowing = 0;
+        this.area = 0;
+        
+        this.parent = parent;
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        for (var j = 0; j < areaOrbs.length; j++) {
+            if (dist(this.x, this.y, areaOrbs[j][0], areaOrbs[j][1]) <
+                dist(this.x, this.y, areaOrbs[this.area][0], areaOrbs[this.area][1])) {
+                this.area = j;
+            }
+        }
+        
+        
+        this.minW = 1.3;
+        this.minH = 1.3;
+        this.maxW = depth + 2;
+        this.maxH = depth + 2;
+        if (this.maxW > 7) {this.maxW = 7;}
+        if (this.maxH > 7) {this.maxH = 7;}
+        
+        if (this.area == 1) {
+            this.minW = 2;
+            this.maxH = 2;
+            this.maxW = 2 + (maxDepth - depth);
+            this.maxH = 2 + (maxDepth - depth);
+        } else if (this.area == 2) {
+            this.minW = 4;
+            this.maxW = 7;
+            this.maxH = 3.8;
+        } else if (this.area == 3) {
+            this.maxW = 3.8;
+            this.minH = 4;
+            this.maxH = 7;
+        } else if (this.area == 5) {
+            this.minW = 1;
+            this.maxW = 3;
+            this.minH = 1;
+            this.maxH = 3;
+        } else if (this.area == 6) {
+            this.minW = 4;
+            this.maxW = 4;
+            this.minH = 4;
+            this.maxH = 4;
+        } else if (this.area == 7) {
+            this.minW = 1;
+            this.maxW = 1.6;
+            this.minH = 5;
+            this.maxH = 10;
+        } else if (this.area == 4) {
+            this.minH = 1;
+            this.maxH = 1.6;
+            this.minW = 5;
+            this.maxW = 10;
+        }
+        if (random(0, 10) > 9) {
+            this.minW = 1;
+            this.minH = 1;
+            this.maxW = 5;
+            this.maxH = 5;
+        }
+        
+        this.depth = depth;
+        this.exits = exits;
+        if (this.depth >= 0) {
+            for (var i = 0; i < this.exits.length; i++) {
+                var exitLength = this.exits.length;
+                if (this.exits[i].makeRoom == false) {
+                    continue;
+                }
+                var nextRoomW = round(random(this.minW, this.maxW));
+                var nextRoomH = round(random(this.minH, this.maxH));
+                var nextRoomOffsetX = round(random(-nextRoomW + 1, 0));
+                var nextRoomOffsetY = round(random(-nextRoomH + 1, 0));
+                if (this.exits[i].side == "top") {
+                    //alert(this.id + ", " + (roomLength - 1));
+                    generateRoom(this, i, this.x + this.exits[i].x + nextRoomOffsetX, this.y - nextRoomH, nextRoomW, nextRoomH, [
+                            {x:-nextRoomOffsetX,y:nextRoomH - 1,side:"bottom",makeRoom:false, screen:this.id, entrance:i},
+                            {x:round(random(0, nextRoomW - 1)),y:0,side:"top",makeRoom:true},
+                            {x:0,y:round(random(0, nextRoomH - 1)), side:"left",makeRoom:true},
+                            {x:nextRoomW - 1,y:round(random(0, nextRoomH - 1)), side:"right",makeRoom:true},
+                          ], this.depth - 1);
+                } else if (this.exits[i].side == "bottom") {
+                    generateRoom(this, i, this.x + this.exits[i].x + nextRoomOffsetX, this.y + this.h, nextRoomW, nextRoomH, [
+                            {x:-nextRoomOffsetX,y:0,side:"top",makeRoom:false, screen:this.id, entrance:i},
+                            {x:round(random(0, nextRoomW - 1)),y:nextRoomH - 1,side:"bottom",makeRoom:true},
+                        
+                            {x:0,y:round(random(0, nextRoomH - 1)), side:"left",makeRoom:true},
+                            {x:nextRoomW - 1,y:round(random(0, nextRoomH - 1)), side:"right",makeRoom:true},
+                          ], this.depth - 1);
+                } else if (this.exits[i].side == "left") {
+                    
+                    generateRoom(this, i, this.x - nextRoomW, this.y + this.exits[i].y + nextRoomOffsetY, nextRoomW, nextRoomH, [
+                            {x:nextRoomW - 1,y:-nextRoomOffsetY,side:"right",makeRoom:false, screen:this.id, entrance:i},
+                            {x:0,y:round(random(0, nextRoomH - 1)), side:"left",makeRoom:true},
+                            {x:round(random(0, nextRoomW - 1)),y:nextRoomH - 1,side:"bottom",makeRoom:true},
+                            {x:round(random(0, nextRoomW - 1)),y:0,side:"top",makeRoom:true},
+                          ], this.depth - 1);
+                    
+                } else if (this.exits[i].side == "right") {
+                    
+                    generateRoom(this, i, this.x + this.w, this.y + this.exits[i].y + nextRoomOffsetY, nextRoomW, nextRoomH, [
+                            {x:0,y:-nextRoomOffsetY,side:"left",makeRoom:false, screen:this.id, entrance:i},
+                            {x:nextRoomW - 1,y:round(random(0, nextRoomH - 1)), side:"right",makeRoom:true},
+                            {x:round(random(0, nextRoomW - 1)),y:nextRoomH - 1,side:"bottom",makeRoom:true},
+                            {x:round(random(0, nextRoomW - 1)),y:0,side:"top",makeRoom:true},
+                          ], this.depth - 1);
+                    
+                }
+                
+                if (this.exits.length < exitLength) {i--;}
+                ///this.exits[i].makeRoom = false;
+            }
+        }
+    };
+    
+    room.prototype.run = function() {};
+    var mapScale = 8;
+    room.prototype.draw = function() {
+        if (-scrollX + (455 * 2) / 2 >= this.x * mapScale && -scrollX + (455 * 2) / 2 <= (this.x + this.w) * mapScale &&
+            -scrollY + (256 * 2) / 2 >= this.y * mapScale && -scrollY + (256 * 2) / 2 <= (this.y + this.h) * mapScale) {
+            this.glowing = 2;
+            if (keysDown[69]) {
+                alert(getRoomDistance(this.id, 0));
+            }
+            for (var i = 0; i < this.exits.length; i++) {
+                if (!this.exits[i].screen) {continue;}
+                rooms[this.exits[i].screen].glowing = 2;
+                //alert(rooms[this.exits[i].screen].id + ", " + this.exits[i].screen);
+            }
+            /*var leParent = this.parent;
+            while(leParent) {
+                leParent.glowing = 2;
+                leParent = leParent.parent;
+            }*/
+        }
+        fill(255, 255, 255);
+        if (this.glowing > 0) {fill(255, 0, 0);}
+        if (this.glowing > -10) {this.glowing--;}
+        rect(this.x * mapScale, this.y * mapScale, this.w * mapScale, this.h * mapScale);
+        
+        fill(areaColors[this.area][0], areaColors[this.area][1], areaColors[this.area][2]);
+        //fill(this.depth * 25, this.depth * 25, this.depth * 25);
+        rect(this.x * mapScale + 1, this.y * mapScale + 1, this.w * mapScale - 2, this.h * mapScale - 2);
+      if (!keys[32]) {
+        for (var i = 0; i < this.exits.length; i++) {
+             fill(0, 0, 0);
+            if (this.exits[i].side == "top") {
+            rect(this.x * mapScale + this.exits[i].x * mapScale + (mapScale / 4), this.y * mapScale, mapScale / 2, 1);
+            } else if (this.exits[i].side == "bottom") {
+                //fill(255, 0, 0);
+                rect(this.x * mapScale + this.exits[i].x * mapScale + (mapScale / 4), this.y * mapScale + ((this.h) * mapScale - 1), mapScale / 2, 1);
+            } else if (this.exits[i].side == "left") {
+            rect(this.x * mapScale, this.y * mapScale + this.exits[i].y * mapScale + (mapScale / 4), 1, mapScale / 2);
+            } else if (this.exits[i].side == "right") {
+            rect(this.x * mapScale + this.w * mapScale - 1, this.y * mapScale + this.exits[i].y * mapScale + (mapScale / 4), 1, mapScale / 2);
+            }
+        }
+      } else {
+        for (var i = 0; i < this.exits.length; i++) {
+            if (this.exits[i].side == "top") {
+                fill(255, 0, 0);
+            } else if (this.exits[i].side == "bottom") {
+                fill(0, 0, 255);
+            } else if (this.exits[i].side == "left") {
+                fill(0, 255, 0);
+            } else if (this.exits[i].side == "right") {
+                fill(255, 255, 0);
+            }
+            rect(this.x * mapScale + this.exits[i].x * mapScale + (mapScale / 4), this.y * mapScale + this.exits[i].y * mapScale + (mapScale / 4), mapScale / 2, mapScale / 2);
+        }
+      }
+    };
+    
+    generateRoom(null, null, 85, 85, 4, 4, [
+            {x:2,y:0,side:"top",makeRoom:true, screen:0,entrance:0},
+            {x:1,y:3,side:"bottom",makeRoom:true, screen:0,entrance:1},
+            {x:0,y:2,side:"left",makeRoom:true, screen:0,entrance:2},
+            {x:3,y:2,side:"right",makeRoom:true, screen:0,entrance:3},
+        ], maxDepth);
+    
+    rooms.sort((a, b) => {return a.id - b.id;});
+    rooms[0].area = 6;
+    
+    for (var i = 0; i < rooms.length * 2; i++) {
+        var sel = round(random(0, rooms.length - 1));
+        //rooms[sel].area = -1;
+        var side = floor(random(0, 3.99));
+        var cantDewit = false;
+        for (var j = 0; j < rooms[sel].exits.length; j++) {
+            //["left", "right", "up", "down"]
+            if (rooms[sel].exits[j].side == ["left", "right", "top", "bottom"][side]) {
+                cantDewit = true;
+            }
+        }
+        //TODO: allow for multiple room exits from the same wall if they lead to different rooms
+        //if (random(0, 10) > 9.5) {cantDewit = false;}
+        //cantDewit = !true;//ILLEGAL EXITS GENERATING HERE
+        if (cantDewit) {continue;}
+        //rooms[sel].area = -1;
+        //side = 0;
+        if (side == 0 || side == 1) {
+            var yAttempt = round(random(0, rooms[sel].h - 1));
+            if (side == 0) {
+                if (roomOccupations[rooms[sel].y + yAttempt] && roomOccupations[rooms[sel].y + yAttempt][rooms[sel].x - 1] > 0) {
+                    
+                    var leScreen = -1;
+                    for (var j = 0; j < rooms.length; j++) {
+                        if (j == i) {continue;}
+                        if (rooms[sel].x - 1 == rooms[j].x /*&& rooms[sel].x - 1 < rooms[j].x + rooms[j].w*/ && rooms[sel].y + yAttempt >= rooms[j].y && rooms[sel].y + yAttempt < rooms[j].y + rooms[j].h) {
+                            //if (rooms[j].x + rooms[j].w - 1 != rooms[sel].x - 1) {alert("illegal");}
+                            //rooms[j].area++;
+                            rooms[j].exits.push({x:rooms[j].w - 1, y:(rooms[sel].y - rooms[j].y) + yAttempt, side:"right",makeRoom:false, screen:sel, entrance: rooms[sel].exits.length, spawnReason:"roomConnector j R"});
+                            leScreen = j;
+                            j = rooms.length;
+                        }
+                    }
+                    
+                    if (leScreen >= 0) {
+                        rooms[sel].exits.push(
+                            {x:0,y:yAttempt,side:"left",makeRoom:false, screen: leScreen, entrance: rooms[leScreen].exits.length - 1, spawnReason:"roomConnector i L"},
+                        );
+                    }
+                }
+            } else if (side == 1) {
+                if (roomOccupations[rooms[sel].y + yAttempt] && roomOccupations[rooms[sel].y + yAttempt][rooms[sel].x + rooms[sel].w] > 0) {
+                    var leScreen = -1;
+                    for (var j = 0; j < rooms.length; j++) {
+                        if (j == i) {continue;}
+                        if (rooms[sel].x + rooms[sel].w == rooms[j].x && rooms[sel].y + yAttempt >= rooms[j].y && rooms[sel].y + yAttempt <= rooms[j].y + rooms[j].h) {
+                            //rooms[j].area++;
+                            rooms[j].exits.push({x:0, y:(rooms[sel].y - rooms[j].y) + yAttempt, side:"left",makeRoom:false, screen:sel, entrance: rooms[sel].exits.length, spawnReason:"roomConnector j L"});
+                            leScreen = j;
+                            j = rooms.length;
+                        }
+                    }
+                    //rooms[sel].area = -1;
+                    if (leScreen >= 0) {
+                        rooms[sel].exits.push(
+                            {x:rooms[sel].w - 1,y:yAttempt,side:"right",makeRoom:false, screen: leScreen, entrance: rooms[leScreen].exits.length - 1, spawnReason:"roomConnector i R"},
+                        );
+                    }
+                }
+            }
+        } else if (side == 2 || side == 3) {
+            var xAttempt = round(random(0, rooms[sel].w - 1));
+            if (side == 2) {
+                if (roomOccupations[rooms[sel].y - 1] && roomOccupations[rooms[sel].y - 1][rooms[sel].x + xAttempt]) {
+                    var leScreen = -1;
+                    for (var j = 0; j < rooms.length; j++) {
+                        if (j == i) {continue;}
+                        if (rooms[sel].x + xAttempt >= rooms[j].x && rooms[sel].x + xAttempt < rooms[j].x + rooms[j].w && rooms[sel].y - 1 >= rooms[j].y && rooms[sel].y - 1 < rooms[j].y + rooms[j].h) {
+                            //rooms[j].area++;
+                            rooms[j].exits.push({x:(rooms[sel].x - rooms[j].x) + xAttempt, y:(rooms[j].h - 1), side:"bottom",makeRoom:false, screen:sel, entrance: rooms[sel].exits.length, spawnReason:"roomConnector j D"});
+                            leScreen = j;
+                            j = rooms.length;
+                        }
+                    }
+                    //rooms[sel].area = -1;
+                    if (leScreen >= 0) {
+                        rooms[sel].exits.push(
+                            {x:xAttempt,y:0,side:"top",makeRoom:false, screen: leScreen, entrance: rooms[leScreen].exits.length - 1, spawnReason:"roomConnector i U"},
+                        );
+                    }
+                }
+            } /*else if (side == 3) {
+                if (roomOccupations[rooms[sel].y + rooms[sel].h] && roomOccupations[rooms[sel].y + rooms[sel].h][rooms[sel].x + xAttempt]) {
+                    var leScreen = -1;
+                    for (var j = 0; j < rooms.length; j++) {
+                        if (j == i) {continue;}
+                        if (rooms[sel].x + xAttempt >= rooms[j].x && rooms[sel].x + xAttempt < rooms[j].x + rooms[j].w && rooms[sel].y + rooms[sel].h >= rooms[j].y && rooms[sel].y + rooms[sel].h <= rooms[j].y + rooms[j].h) {
+                            //rooms[j].area++;
+                            rooms[j].exits.push({x:(rooms[sel].x - rooms[j].x) + xAttempt, y:0, side:"top",makeRoom:false, screen:sel, entrance: rooms[sel].exits.length});
+                            leScreen = j;
+                            j = rooms.length;
+                        }
+                    }
+                    //rooms[sel].area = -1;
+                    if (leScreen >= 0) {
+                        rooms[sel].exits.push(
+                            {x:xAttempt,y:rooms[sel].h - 1,side:"bottom",makeRoom:false, screen: leScreen, entrance: rooms[leScreen].exits.length - 1},
+                        );
+                    }
+                }
+            }*/
+        }
+        rooms[sel];
+    }
+    
+    var turfWarStarterRooms = [];
+    for (var i = 0; i < areaOrbs.length; i++) {
+        var closestRoom = 0;
+        for (var j = 0; j < rooms.length; j++) {
+            if (rooms[j].claimed == undefined && dist(rooms[closestRoom].x, rooms[closestRoom].y, areaOrbs[i][0], areaOrbs[i][1]) >
+                dist(rooms[j].x, rooms[j].y, areaOrbs[i][0], areaOrbs[i][1])) {
+                closestRoom = j;
+            }
+        }
+        //rooms[closestRoom].area = 50 + i;
+        rooms[closestRoom].area = i;
+        rooms[closestRoom].claimed = i;
+        turfWarStarterRooms.push(closestRoom);
+    }
+    //alert(turfWarStarterRooms);
+    
+    var nextQueues = [];
+    for (var i = 0; i < areaOrbs.length; i++) {
+        nextQueues.push([turfWarStarterRooms[i]]);
+    }
+    var leTimer = maxDepth * 2;
+    var thereIsARoom = true;//true to use turf wars
+    var doTurfWars = function() {
+        //alert("e");
+        thereIsARoom = false;
+        leTimer--;
+        for (var k = 0; k < areaOrbs.length; k++) {
+            var currentNQLength = nextQueues[k].length;
+            for (var j = 0; j < currentNQLength; j++) {
+                for (var i = 0; i < rooms[nextQueues[k][j]].exits.length; i++) {
+                    if (rooms[nextQueues[k][j]].claimed == k && rooms[rooms[nextQueues[k][j]].exits[i].screen].claimed == undefined) {
+                        rooms[rooms[nextQueues[k][j]].exits[i].screen].claimed = k;
+                        rooms[rooms[nextQueues[k][j]].exits[i].screen].area = k;
+                        nextQueues[k].push(rooms[nextQueues[k][j]].exits[i].screen);
+                        areaRoomCounts[k]++;
+                        thereIsARoom = true;
+                    }
+                }
+            }
+            nextQueues[k].splice(0, currentNQLength);
+        }
+    };
+    while (thereIsARoom && leTimer > 0) {
+        doTurfWars();
+    }
+    
+    var areaConnections = [];
+    for (var i = 0; i < areaColors.length; i++) {
+        areaConnections.push([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+    }
+    for (var i = 0; i < rooms.length; i++) {
+        for (var j = 0; j < rooms[i].exits.length; j++) {
+            if (rooms[rooms[i].exits[j].screen].area != rooms[i].area) {
+                areaConnections[rooms[i].area][0]++;
+            }
+        }
+    }
+    
+    //Interconnectivity adder
+    for (var i = 0; i < rooms.length; i++) {
+        for (var j = 0; j < rooms.length; j++) {
+            if (rooms[i].area == rooms[j].area/* || rooms[i].area == 0 || rooms[j].area == 0*/) {continue;}
+            var shouldContinue = false;
+            for (var k = 0; k < rooms[i].exits.length; k++) {
+                if (rooms[i].exits[k].screen == j) {
+                    shouldContinue = true;
+                }
+            }
+            if (shouldContinue) {continue;}
+            
+            //Exit on right of i and left of j
+            if (rooms[i].x + rooms[i].w == rooms[j].x && rooms[i].y < rooms[j].y + rooms[j].h && rooms[i].y + rooms[i].h > rooms[j].y) {
+                if (getRoomDistance(rooms[i].id, rooms[j].id) >= 7) {
+                    var foundPlaces = [];
+                    for (var l = 0; l < rooms[i].h; l++) {
+                        if (rooms[i].y + l >= rooms[j].y && rooms[i].y + l < rooms[j].y + rooms[j].h) {
+                            foundPlaces.push(l);
+                        }
+                    }
+                    //rooms[i].area = 0;
+                    //rooms[j].area = 0;
+                    var ySetter = foundPlaces[floor(random(0, foundPlaces.length - 0.01))];
+                    rooms[j].exits.push({x:0, y:(rooms[i].y - rooms[j].y) + ySetter, side:"left",makeRoom:false, screen:rooms[i].id, entrance: rooms[i].exits.length, spawnReason:"areaConnector j L\n" + JSON.stringify(rooms[i].exits) + "\n" + JSON.stringify(rooms[j].exits)});
+                    rooms[i].exits.push({x:rooms[i].w - 1,y:ySetter,side:"right",makeRoom:false, screen: rooms[j].id, entrance: rooms[j].exits.length - 1, spawnReason:"areaConnector i R"});
+                    //floor(random(0, foundPlaces.length - 0.01));
+                }
+            } else if (false) {//Exit on left of i and right of j
+            } else if (rooms[i].y + rooms[i].h == rooms[j].y && rooms[i].x < rooms[j].x + rooms[j].w && rooms[i].x + rooms[i].w > rooms[j].x) {//Exit on bottom of i and top of j
+                if (getRoomDistance(rooms[i].id, rooms[j].id) >= 7) {
+                    var foundPlaces = [];
+                    for (var l = 0; l < rooms[i].w; l++) {
+                        if (rooms[i].x + l >= rooms[j].x && rooms[i].x + l < rooms[j].x + rooms[j].w) {
+                            foundPlaces.push(l);
+                        }
+                    }
+                    //rooms[i].area = 0;
+                    //rooms[j].area = 0;
+                    //alert("e");
+                    var xSetter = foundPlaces[floor(random(0, foundPlaces.length - 0.01))];
+                    rooms[j].exits.push({y:0, x:(rooms[i].x - rooms[j].x) + xSetter, side:"top",makeRoom:false, screen:rooms[i].id, entrance: rooms[i].exits.length, spawnReason:"areaConnector j U"});
+                    rooms[i].exits.push({y:rooms[i].h - 1,x:xSetter,side:"bottom",makeRoom:false, screen: rooms[j].id, entrance: rooms[j].exits.length - 1, spawnReason:"areaConnector i D"});
+                    //floor(random(0, foundPlaces.length - 0.01));
+                }
+            } else if (false) {
+            }
+        }
+    }
+    
+    var areaConnections2 = [];
+    for (var i = 0; i < areaColors.length; i++) {
+        areaConnections2.push([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+    }
+    for (var i = 0; i < rooms.length; i++) {
+        for (var j = 0; j < rooms[i].exits.length; j++) {
+            if (rooms[rooms[i].exits[j].screen].area != rooms[i].area) {
+                areaConnections2[rooms[i].area][0]++;
+            }
+        }
+        //dead end checker
+        /*
+        Options for dead ends:
+        Secret Shortcut
+        Ability-Gated Shortcut
+        Normal Shortcut(just connect rooms)
+        Shops
+        NPCs
+        Save Points?
+        Challenge for stuff
+        Hidden Room for stuff
+        Bosses
+        Abilities
+        Upgrades
+        Keys
+        Aestetically Pleasing Room/Lore
+        Just remove them(perhaps do this after assigned value to rooms. I.e. if there is a branch that works pretty well for a boss or key keep it. If it's just a long dead end and upgrades have already been sprinkled delete it)
+        
+        */
+        //if (rooms[i].exits.length <= 1) {
+        //    rooms[i].area = 0;
+        //}
+        
+        //illegal exit checker. Should make into a function, run whenever a new room is created, and then debug
+        //NOTE: This has been fixed(unless it isn't...) but the code is here for future use
+        /*for (var k = 0; k < rooms[i].exits.length; k++) {
+            for (var l = 0; l < rooms[rooms[i].exits[k].screen].exits.length; l++) {
+                if (rooms[rooms[i].exits[k].screen].exits[l].screen != i) {continue;}
+                if ((rooms[i].exits[k].side == "left") && rooms[i].x + rooms[i].exits[k].x != rooms[rooms[i].exits[k].screen].x + rooms[rooms[i].exits[k].screen].exits[l].x + 1 ||
+                    (rooms[i].exits[k].side == "right") && rooms[i].x + rooms[i].exits[k].x != rooms[rooms[i].exits[k].screen].x + rooms[rooms[i].exits[k].screen].exits[l].x - 1 ||
+                   (rooms[i].exits[k].side == "top") && rooms[i].y + rooms[i].exits[k].y != rooms[rooms[i].exits[k].screen].y + rooms[rooms[i].exits[k].screen].exits[l].y + 1 ||
+                    (rooms[i].exits[k].side == "bottom") && rooms[i].y + rooms[i].exits[k].y != rooms[rooms[i].exits[k].screen].y + rooms[rooms[i].exits[k].screen].exits[l].y - 1) {
+                    alert(rooms[i].exits[k].spawnReason + "\n" + rooms[i].x + ", " + rooms[i].y + "\n" + (rooms[i].x + rooms[i].exits[k].x - (rooms[rooms[i].exits[k].screen].x + rooms[rooms[i].exits[k].screen].exits[l].x + 1)) + "\n" + (rooms[i].y + rooms[i].exits[k].y - (rooms[rooms[i].exits[k].screen].y + rooms[rooms[i].exits[k].screen].exits[l].y + 1)) + "\n" + rooms[i].exits[k].side);
+                    rooms[i].area = 9;
+                }
+            }
+        }*/
+    }
+    
+    /*var leftRooms = [];
+    var rightRooms = [];
+    for (var i = 0; i < rooms.length; i++) {
+        var rayCaster = [0, 0];
+        rayCaster = [rooms[i].x - 1, rooms[i].y];
+        while(rayCaster[0] > 1 && (roomOccupations[rayCaster[1]][rayCaster[0]] != 1)) {
+            rayCaster[0]--;
+        }
+        if (rayCaster[0] == 1) {
+            rooms[i].edgeType = "left";
+            leftRooms.push(i);
+        }
+        
+        
+        rayCaster = [rooms[i].x + rooms[i].w, rooms[i].y + rooms[i].h - 1];
+        while(rayCaster[0] < 250 && (roomOccupations[rayCaster[1]][rayCaster[0]] != 1)) {
+            rayCaster[0]++;
+        }
+        if (rayCaster[0] >= 250) {
+            rooms[i].edgeType = "right";
+            rightRooms.push(i);
+        }
+    }
+    
+    var myLeftRoom = 0;
+    var myRightRoom = 0;
+    var attemptCount = 0;
+    var working = false;
+    while (myLeftRoom == myRightRoom && attemptCount < 20 && !working) {
+        working = false;
+        attemptCount++;
+        myLeftRoom = leftRooms[round(random(0, leftRooms.length - 1))];
+        myRightRoom = rightRooms[round(random(0, rightRooms.length - 1))];
+        if (rooms[myLeftRoom].x < 10) {
+            working = false;
+        } else {
+            working = true;
+        }
+    }*/
+    
+    
+    /*rooms[myLeftRoom].exits.push(
+        {x:0,y:0,side:"left",makeRoom:false, screen:rooms.length, entrance:0},
+    );
+    var nextRoomW = 4;
+    generateRoom(rooms[myLeftRoom], rooms[myLeftRoom].exits.length - 1, rooms[myLeftRoom].x - nextRoomW, rooms[myLeftRoom].y, nextRoomW, 1, [
+                            {x:nextRoomW - 1,y:0,side:"right",makeRoom:false, screen:rooms[myLeftRoom].id, entrance:rooms[myLeftRoom].exits.length - 1},
+                            {x:0,y:round(random(0, nextRoomW - 1)), side:"left",makeRoom:true},
+                            {x:round(random(0, nextRoomW - 1)),y:0,side:"bottom",makeRoom:true},
+                            {x:round(random(0, nextRoomW - 1)),y:0,side:"top",makeRoom:true},
+                          ], 10);*/
+    areaColors.push([
+        areaColors[rooms[0].area][0] + 50,
+        areaColors[rooms[0].area][1] + 50,
+        areaColors[rooms[0].area][2] + 50,
+                    ]);
+    rooms[0].area = areaColors.length - 1;
+    
+function run() {
+    //areaColors[areaColors.length - 1] = [245 + random(0, 10), 245 + random(0, 10), 245 + random(0, 10)];
+    if (thereIsARoom && leTimer > 0 && keys[88]) {
+        //doTurfWars();
+    }
+    if (keys[65]) {scrollX += 4;}
+    if (keys[68]) {scrollX -= 4;}
+    if (keys[87]) {scrollY += 4;}
+    if (keys[83]) {scrollY -= 4;}
+    fill(0, 0, 0);
+    rect(0, 0, 455 * 4, 256 * 4);
+    save();
+    translate(scrollX, scrollY);
+    for (var i = 0; i < rooms.length; i++) {
+        rooms[i].run();
+    }
+    
+    
+    for (var i = 0; i < rooms.length; i++) {
+        //if (rooms[i].claimed != undefined) {rooms[i].glowing = 2;}
+        rooms[i].draw();
+    }
+    
+    if (keys[90]) {
+    
+    for (var j = 0; j < roomOccupations.length; j++) {
+        for (var i = 0; i < roomOccupations[j].length; i++) {
+            if (roomOccupations[j][i] > 0) {
+                fill(0, 255, 0, 0.3);
+                rect(i * mapScale, j * mapScale, mapScale, mapScale);
+            }
+        }
+    }
+        
+    }
+    
+    for (var i = 0; i < areaOrbs.length; i++) {
+        fill(0, 0, 0);
+        rect(areaOrbs[i][0] * mapScale, areaOrbs[i][1] * mapScale, 2 * mapScale, 2 * mapScale);
+        fill(areaColors[i][0] + random(-10, 10), areaColors[i][1] + random(-10, 10), areaColors[i][2] + random(-10, 10));
+        rect(areaOrbs[i][0] * mapScale + 1, areaOrbs[i][1] * mapScale + 1, 2 * mapScale - 2, 2 * mapScale - 2);
+    }
+    
+    fill(255, 255, 255, 0.4);
+    //rect(rooms[myLeftRoom].x * mapScale, rooms[myLeftRoom].y * mapScale, 5 * mapScale, 5 * mapScale);
+    //rect(rooms[myRightRoom].x * mapScale, rooms[myRightRoom].y * mapScale, 5 * mapScale, 5 * mapScale);
+    restore();
+    
+    fill(255, 255, 255);
+    font("12px monospace");
+    
+    for (var i = 0; i < areaNames.length; i++) {
+        if (i < areaColors.length) {
+            fill(areaColors[i][0] * 2, areaColors[i][1] * 2, areaColors[i][2] * 2);
+        } else {
+            fill(255, 255, 255);
+        }
+        if (areaRoomCounts[i]) {
+            text((areaRoomCounts[i] + 1) + " " + areaNames[i] + " [" + areaConnections[i][0] + ", " + areaConnections2[i][0] + "]", 10, 10 + i * 14);
+        } else {
+            text(areaNames[i], 10, 10 + i * 14);
+        }
+    }
+    text("" + areaRoomCounts, 10, 180);
+    text("Total Rooms: " + rooms.length, 10, 200);
+    if (keysDown[82]) {
+        location.reload();
+    }
+    keysDown = [];
+    requestAnimationFrame(run);
+};
+run();
+} catch(e){alert(e);}
+//https://stackoverflow.com/questions/19764018/controlling-fps-with-requestanimationframe
+</script>
+</html>

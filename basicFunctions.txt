@@ -1,0 +1,146 @@
+var getId = function(getId) {
+    return document.getElementById(getId);
+};
+
+const canvas = document.getElementById("canva");
+const can = canvas.getContext("2d");
+
+function generateBag(bag) {
+    var bagLength = bag.length;
+    var newBag = [];
+    for (var i = 0; i < bagLength; i++) {
+        var pickBag = floor(random(0, bag.length - 1));
+        newBag.push(bag[pickBag]);
+        bag.splice(pickBag, 1);
+    }
+    return newBag;
+};
+
+function checkBlinking(obj) {
+    var returner = false;
+    if (obj.immuneTimers[1] <= 0 && obj.immuneTimers[0] == round(obj.immuneTimers[0] / 2) * 2 || dramaticTimer > 0 || players[0].hp <= 0 || paused || inventoryOpened || inventoryFade > 0) {
+        returner = true;
+    }
+    return returner;
+};
+
+function fullscreen() {
+    //Couldn't find SO link for this portion but it is SUPER general so I think it is fair use.
+    if (canvas.webkitRequestFullScreen) {
+        canvas.webkitRequestFullScreen();
+    } else {
+        canvas.mozRequestFullScreen();
+    }
+    //Couldn't find SO link for this portion but it is SUPER general so I think it is fair use.
+    resizeScreen(round(window.innerWidth / 455) + 1);//This line is mine though
+}
+//canvas.addEventListener("click", fullscreen);
+
+can.imageSmoothingEnabled = false;
+
+
+var rect = function(x, y, w, h) {
+can.fillRect(x, y, w, h);
+};
+
+var line = function(x1, y1, x2, y2) {
+can.beginPath();
+can.moveTo(x1, y1);
+can.lineTo(x2, y2);
+can.closePath();
+can.strokeStyle = can.fillStyle;
+can.stroke();
+};
+
+var triangle = function(x1, y1, x2, y2, x3, y3) {
+can.beginPath();
+can.moveTo(x1, y1);
+can.lineTo(x2, y2);
+can.lineTo(x3, y3);
+can.closePath();
+can.fill();
+};
+
+var fill = function(r, g, b, a) {
+if (a === undefined) {
+a = 1;
+}
+can.fillStyle = "rgb(" + r + "," + g + "," + b + "," + a + ")";
+};
+
+var font = function(siz) {
+    can.font = siz;
+};
+var textAlign = function(ali) {
+    can.textAlign = ali;
+};
+var text = function(txt, x, y, w, h) {
+    can.fillText(txt, x, y, w, h);
+};
+
+var image = function(src, slices, x, y, w, h) {
+  if (slices != undefined) {
+    if (slices.shiftX != undefined) {
+        x += slices.shiftX;
+        y += slices.shiftY;
+    }
+
+    if (w == undefined) {
+        w = slices.w;
+        h = slices.h;
+    }
+    can.drawImage(getId(src), slices.x, slices.y, slices.w, slices.h, x, y, w, h);
+  }
+};
+
+var singleImage = function(src, x, y, w, h) {
+    var w2 = w;
+    var h2 = h;
+    if (w == undefined) {w2 = src.width;}
+    if (h == undefined) {h2 = src.height;}
+    can.drawImage(src, x, y, w2, h2);
+};
+
+//Algebraic stuff
+var sin = function(v) {
+    return Math.sin(v);
+};
+var cos = function(v) {
+    return Math.cos(v);
+};
+var abs = function(v) {
+    return Math.abs(v);
+};
+var dist = function(x1, y1, x2, y2) {
+    var distance = ((x1 - x2)*(x1 - x2)) + ((y1 - y2)*(y1 - y2));
+    return Math.sqrt(abs(distance));
+};
+
+//Integer stuff
+var round = function(v) {
+return Math.round(v);
+};
+var floor = function(v) {
+return Math.floor(v);
+};
+var ceil = function(v) {
+return Math.ceil(v);
+};
+var random = function(min, max) {
+return (Math.random() * (max - min)) + min;
+};
+var constrain = function(value, min, max) {
+if (value < min) {
+    value = min;
+} else if (value > max) {
+    value = max;
+}
+
+return value;
+};
+
+var save = function() {can.save();};
+var translate = function(x, y) {can.translate(x, y);};
+var scale = function(w, h) {can.scale(w, h);}
+var rotate = function(angles) {can.rotate(angles*Math.PI/180);}
+var restore = function() {can.restore();};
